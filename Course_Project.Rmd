@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Predict how well weight lifting excercies were performed"
 author: "MK"
 date: "2023-11-27"
 output: html_document
@@ -9,22 +9,40 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+## Introduction
+
+This report analyzes data collected during weight lifting exercises by fitness devices. The ultimate goal is to predict how well the exercises were performed based on the data from the accelerometers. Every row of the data set corresponds to one performance of an exercise that has been rated into one of five categories (A-E) by an experienced weight lifter.
+
+The data set used is available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv).
+
+The trained model is used to make prediction for 20 test cases. These test data can be downloaded [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv).
+
 ## Load packages and import data
 
+First, the input data and the necessary packages are loaded. The model is trained using the "caret" package.
 
-```{r import_data, echo=FALSE}
+```{r import_data, warning=FALSE, message=FALSE}
 
 require(tidyverse)
 require(caret)
 
-train <- read_csv("./data/pml-training.csv")
-test <- read_csv("./data/pml-testing.csv")
+train_input <- read_csv("./data/pml-training.csv")
+test_input <- read_csv("./data/pml-testing.csv")
 ```
 
+## Clean data
+
+Next, the first seven columns of the loaded data are excluded. They contain information like user name of the participant performing the exercise or time stamps. These columns should not be used to predict the classes ("How well was the excercise performed?").
+
+In addition, columns (= features) containing mainly empty entries are neglected. In total this reduces the number of columns of the input data from 160 to 53. 
 
 ```{r clean_data}
 
-train <- train %>% 
+# dimensions of input data
+print(dim(train_input))
+
+# exclude first 7 columns like user name or time stamps
+train_cleaned <- train_input %>% 
     select(-`...1`, 
            -user_name,
            -raw_timestamp_part_1,
@@ -34,7 +52,7 @@ train <- train %>%
            -num_window
            )
 
-test <- test %>%
+test_cleaned <- test_input %>%
     select(-`...1`, 
            -user_name,
            -raw_timestamp_part_1,
@@ -45,22 +63,52 @@ test <- test %>%
            )
 
 # only keep columns where most of the rows are filled
-cols_to_keep <- train %>% summarise_all(~ sum(is.na(.) | . == "#DIV/0!") / length(.)) %>% unlist(., use.names=FALSE) < 0.95
+cols_to_keep <- train_cleaned %>% summarise_all(~ sum(is.na(.) | . == "#DIV/0!") / length(.)) %>% unlist(., use.names=FALSE) < 0.95
 
-train_cleaned <- train[cols_to_keep]
-test_cleaned <- test[cols_to_keep]
+train_cleaned <- train_cleaned[cols_to_keep]
+test_cleaned <- test_cleaned[cols_to_keep]
+
+# dimensions of cleaned training data
+print(dim(train_cleaned))
 ```
 
+## Train model
 
+The cleaned data is used to train the model. Due to the fact that we use the random forest method this can take up several minutes. All remaining columns of the input data are used to predict "classe". We also use 5-fold cross validation in training of the model to get an estimate of the out of sample error of our model.
+
+We find a cross validated accuracy of ~99% using the model described above. This is a rough estimate of the out of sample error.
+
+For computational reasons we also tried to predict "classe" using a simple decision tree (method "rpart" in caret). However, the cross validated accuracy of this model was only ~50%.
+
+We also tried to center and scale the data in a separate preprocessing step before training the model. This did not lead to a significant improvement in the accuracy and therefore was omitted for computational reasons.
 
 ```{r create_model}
 
-train_small <- train_cleaned %>% select(roll_belt, pitch_belt, classe)
+# use cross validation
+fitControl <- trainControl(method = "repeatedcv",
+                           number = 5,
+                           repeats = 1)
 
-modelFit <- train(classe ~ ., data=train_cleaned, method="rpart", preProc = c("center", "scale"))
 
+# random forest model
+modelFit <- train(classe ~ ., data=train_cleaned, trControl = fitControl, method="rf")
+
+print(modelFit)
+
+# decision tree model
+modelFit_rpart <- train(classe ~ ., data=train_cleaned, trControl = fitControl ,method="rpart", preProc = c("center", "scale"))
+
+print(modelFit_rpart)
+```
+
+## Predict on test data
+
+We use the very accurate random forest model to predict the classes of the test data.
+
+```{r test_predictions}
+
+# predictions for test set
 test_pred <- predict(modelFit, newdata = test_cleaned)
-test_data <- as.factor(test_cleaned$classe)
-
+print(test_pred)
 ```
 
