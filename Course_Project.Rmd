@@ -1,0 +1,66 @@
+---
+title: "Untitled"
+author: "MK"
+date: "2023-11-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load packages and import data
+
+
+```{r import_data, echo=FALSE}
+
+require(tidyverse)
+require(caret)
+
+train <- read_csv("./data/pml-training.csv")
+test <- read_csv("./data/pml-testing.csv")
+```
+
+
+```{r clean_data}
+
+train <- train %>% 
+    select(-`...1`, 
+           -user_name,
+           -raw_timestamp_part_1,
+           -raw_timestamp_part_2,
+           -cvtd_timestamp,
+           -new_window,
+           -num_window
+           )
+
+test <- test %>%
+    select(-`...1`, 
+           -user_name,
+           -raw_timestamp_part_1,
+           -raw_timestamp_part_2,
+           -cvtd_timestamp,
+           -new_window,
+           -num_window
+           )
+
+# only keep columns where most of the rows are filled
+cols_to_keep <- train %>% summarise_all(~ sum(is.na(.) | . == "#DIV/0!") / length(.)) %>% unlist(., use.names=FALSE) < 0.95
+
+train_cleaned <- train[cols_to_keep]
+test_cleaned <- test[cols_to_keep]
+```
+
+
+
+```{r create_model}
+
+train_small <- train_cleaned %>% select(roll_belt, pitch_belt, classe)
+
+modelFit <- train(classe ~ ., data=train_cleaned, method="rpart", preProc = c("center", "scale"))
+
+test_pred <- predict(modelFit, newdata = test_cleaned)
+test_data <- as.factor(test_cleaned$classe)
+
+```
+
